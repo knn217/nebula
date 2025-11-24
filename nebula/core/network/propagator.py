@@ -1,3 +1,4 @@
+import copy
 import asyncio
 import logging
 import sys
@@ -180,6 +181,7 @@ class Propagator:
     def __init__(self):
         self._cm = None
         self._running = asyncio.Event()
+        self._old_model = None
 
     @property
     def cm(self):
@@ -308,7 +310,7 @@ class Propagator:
             bool: True if propagation occurred (payload sent), False if halted early.
         """
         eligible_neighbors, strategy_id = await mpe.get_event_data()
-        
+
         self.reset_status_history()
         if strategy_id not in self.strategies:
             logging.info(f"Strategy {strategy_id} not found.")
@@ -334,21 +336,34 @@ class Propagator:
             logging.info("Exiting propagation due to repeated statuses.")
             return False
 
+        logging.info(f"old model: {self._old_model}")
         model_params, weight = strategy.prepare_model_payload(None)
-        if model_params:
-            serialized_model = (
-                model_params if isinstance(model_params, bytes) else self.trainer.serialize_model(model_params)
+        logging.info(f"model after train: {model_params}")
+        model_deltas = copy.deepcopy(model_params)
+
+        if self._old_model:
+            for key in model_deltas:
+                model_deltas[key] -= self._old_model[key]
+        self._old_model = copy.deepcopy(model_params)
+
+        if model_deltas:
+            serialized_model_deltas = (
+                model_deltas if isinstance(model_deltas, bytes) else self.trainer.serialize_model(model_deltas)
             )
         else:
-            serialized_model = None
+            serialized_model_deltas = None
+        logging.info(f"model delta to send: {model_deltas}")
 
         current_round = await self.get_round()
         round_number = -1 if strategy_id == "initialization" else current_round
-        parameters = serialized_model
-        message = self.cm.create_message("model", "", round_number, parameters, weight)
+        if round_number == -1:
+            self._old_model = None
+
+        # Send model in message
+        message = self.cm.create_message("model", "", round_number, serialized_model_deltas, weight)
         for neighbor_addr in eligible_neighbors:
             logging.info(
-                f"Sending model to {neighbor_addr} with round {await self.get_round()}: weight={weight} | size={sys.getsizeof(serialized_model) / (1024** 2) if serialized_model is not None else 0} MB"
+                f"Sending model's delta to {neighbor_addr} with round {round_number}: weight={weight} | size={sys.getsizeof(serialized_model_deltas) / (1024** 2) if serialized_model_deltas is not None else 0} MB"
             )
             asyncio.create_task(self.cm.send_message(neighbor_addr, message, "model"))
             # asyncio.create_task(self.cm.send_model(neighbor_addr, round_number, serialized_model, weight))
