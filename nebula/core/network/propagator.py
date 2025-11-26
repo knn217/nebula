@@ -344,6 +344,26 @@ class Propagator:
         if self._old_model:
             for key in model_deltas:
                 model_deltas[key] -= self._old_model[key]
+
+                # Perform delta filtering, quantization here
+                # 1. Manually copy tensor values into a new Python list
+                flat = []
+                for x in model_deltas[key].view(-1):
+                    flat.append(float(x))
+
+                # Filter 40% lowest values
+                n = len(flat)
+                k = int(n * 0.4)
+                logging.info(f"Number of filtered params: {k}")
+
+                # 2. Compute threshold
+                abs_sorted = sorted(flat, key=lambda x: abs(x))
+                threshold = abs(abs_sorted[k])
+
+                # Apply filter
+                t = model_deltas[key]
+                t[t.abs() <= threshold] = 0
+
         self._old_model = copy.deepcopy(model_params)
 
         if model_deltas:
