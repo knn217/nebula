@@ -182,6 +182,7 @@ class Propagator:
         self._cm = None
         self._running = asyncio.Event()
         self._old_model = None
+        self._old_neighbors = []
 
     @property
     def cm(self):
@@ -336,43 +337,41 @@ class Propagator:
             logging.info("Exiting propagation due to repeated statuses.")
             return False
 
-        logging.info(f"old model: {self._old_model}")
         model_params, weight = strategy.prepare_model_payload(None)
-        logging.info(f"model after train: {model_params}")
-        model_deltas = copy.deepcopy(model_params)
+        if model_params:
+            serialized_model_params = (model_params if isinstance(model_params, bytes) else self.trainer.serialize_model(model_params))
+        else:
+            serialized_model_params = None
 
-        if self._old_model:
+        if self._old_model and model_params:
+            model_deltas = copy.deepcopy(model_params)
             for key in model_deltas:
                 model_deltas[key] -= self._old_model[key]
-
                 # Perform delta filtering, quantization here
                 # 1. Manually copy tensor values into a new Python list
                 flat = []
                 for x in model_deltas[key].view(-1):
                     flat.append(float(x))
-
-                # Filter 40% lowest values
+                # Filter 60% lowest values
                 n = len(flat)
-                k = int(n * 0.4)
+                k = int(n * 0.6)
                 logging.info(f"Number of filtered params: {k}")
-
                 # 2. Compute threshold
                 abs_sorted = sorted(flat, key=lambda x: abs(x))
                 threshold = abs(abs_sorted[k])
-
                 # Apply filter
                 t = model_deltas[key]
                 t[t.abs() <= threshold] = 0
-
-        self._old_model = copy.deepcopy(model_params)
-
-        if model_deltas:
-            serialized_model_deltas = (
-                model_deltas if isinstance(model_deltas, bytes) else self.trainer.serialize_model(model_deltas)
-            )
+            serialized_model_deltas = (model_deltas if isinstance(model_deltas, bytes) else self.trainer.serialize_model(model_deltas))
         else:
+            model_deltas = None
             serialized_model_deltas = None
-        logging.info(f"model delta to send: {model_deltas}")
+
+        logging.info(f"old model: {self._old_model}")
+        logging.info(f"model after train: {model_params}")
+        logging.info(f"model deltas to send: {model_deltas}")
+        logging.info(f"model params to send: {model_params}")
+        self._old_model = copy.deepcopy(model_params)
 
         current_round = await self.get_round()
         round_number = -1 if strategy_id == "initialization" else current_round
@@ -380,13 +379,22 @@ class Propagator:
             self._old_model = None
 
         # Send model in message
-        message = self.cm.create_message("model", "", round_number, serialized_model_deltas, weight)
+        message_params = self.cm.create_message("model", "", round_number, serialized_model_params, weight, False)
+        message_deltas = self.cm.create_message("model", "", round_number, serialized_model_deltas, weight, True)
         for neighbor_addr in eligible_neighbors:
-            logging.info(
-                f"Sending model's delta to {neighbor_addr} with round {round_number}: weight={weight} | size={sys.getsizeof(serialized_model_deltas) / (1024** 2) if serialized_model_deltas is not None else 0} MB"
-            )
-            asyncio.create_task(self.cm.send_message(neighbor_addr, message, "model"))
-            # asyncio.create_task(self.cm.send_model(neighbor_addr, round_number, serialized_model, weight))
+            if (neighbor_addr not in self._old_neighbors) or (0 >= round_number):
+                logging.info(
+                    f"[NEW] Sending model's params to {neighbor_addr} with round {round_number}: weight={weight} | size={sys.getsizeof(serialized_model_params) / (1024** 2) if serialized_model_params is not None else 0} MB"
+                )
+                asyncio.create_task(self.cm.send_message(neighbor_addr, message_params, "model"))
+            else:
+                logging.info(
+                    f"[OLD] Sending model's deltas to {neighbor_addr} with round {round_number}: weight={weight} | size={sys.getsizeof(serialized_model_deltas) / (1024** 2) if serialized_model_deltas is not None else 0} MB"
+                )
+                asyncio.create_task(self.cm.send_message(neighbor_addr, message_deltas, "model"))
+                # asyncio.create_task(self.cm.send_model(neighbor_addr, round_number, serialized_model, weight))
+
+        self._old_neighbors = copy.deepcopy(eligible_neighbors)
 
         await asyncio.sleep(self.interval)
         return True

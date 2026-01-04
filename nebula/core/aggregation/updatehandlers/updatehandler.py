@@ -51,7 +51,7 @@ class UpdateHandler(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_round_updates(self) -> dict[str, tuple[object, float]]:
+    async def get_round_updates(self) -> dict[str, tuple[object, float, bool]]:
         """
         Retrieves the latest updates from all received sources in the current round.
 
@@ -59,7 +59,7 @@ class UpdateHandler(ABC):
         prioritizing the most recent update available in the buffer.
 
         Returns:
-            dict: A dictionary where keys are source identifiers and values are tuples `(model, weight)`,
+            dict: A dictionary where keys are source identifiers and values are tuples `(model, weight, delta)`,
                   representing the latest updates received from each source.
         """
         raise NotImplementedError

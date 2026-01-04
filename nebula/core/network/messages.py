@@ -81,9 +81,10 @@ class MessagesManager:
                 },
             },
             "model": {
-                "parameters": ["round", "parameters", "weight"],
+                "parameters": ["round", "parameters", "weight", "delta"],
                 "defaults": {
                     "weight": 1,
+                    "delta": None,
                 },
             },
             "reputation": {

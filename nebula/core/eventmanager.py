@@ -78,6 +78,7 @@ class EventManager:
                 else:
                     callback(message_event.source, message_event.message)
             except Exception as e:
+                logging.info(f"EventManager | Error in callback for event {message_event.source} <|> {message_event.message}")
                 logging.exception(f"EventManager | Error in callback for event {event_type}: {e}")
 
         # Global callbacks (callbacks for all message events)

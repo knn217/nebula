@@ -71,6 +71,7 @@ message ModelMessage {
   bytes parameters = 1;       // Serialized form of the model parameters.
   int64 weight = 2;           // Significance or weighting factor of this model update, e.g., based on sample size.
   int32 round = 3;            // Identifies the communication round, particularly useful in iterative processes.
+  bool delta = 4;             // Specify delta messages for incremental instead of overwrite update.
 }
 
 message ConnectionMessage {

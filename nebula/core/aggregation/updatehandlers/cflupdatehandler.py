@@ -15,17 +15,19 @@ if TYPE_CHECKING:
 class Update:
     """
     Represents a model update received from a node in a specific training round.
-    
+
     Attributes:
         model (object): The model object or weights received.
         weight (float): The weight or importance of the update.
+        delta (bool): The delta indicator to apply incremental or overwrite update.
         source (str): Identifier of the node that sent the update.
         round (int): Training round this update belongs to.
         time_received (float): Timestamp when the update was received.
     """
-    def __init__(self, model, weight, source, round, time_received):
+    def __init__(self, model, weight, delta, source, round, time_received):
         self.model = model
         self.weight = weight
+        self.delta = delta
         self.source = source
         self.round = round
         self.time_received = time_received
@@ -55,7 +57,7 @@ class CFLUpdateHandler(UpdateHandler):
         _missing_ones (set): Tracks nodes whose updates are missing.
         _role (str): Role of this node (e.g., trainer or server).
     """
-    
+
     def __init__(self, aggregator, addr, buffersize=MAX_UPDATE_BUFFER_SIZE):
         self._addr = addr
         self._aggregator: Aggregator = aggregator
@@ -131,17 +133,17 @@ class CFLUpdateHandler(UpdateHandler):
             updt_received_event (UpdateReceivedEvent): The event containing the update.
         """
         time_received = time.time()
-        (model, weight, source, round, _) = await updt_received_event.get_event_data()
+        (model, weight, delta, source, round, _) = await updt_received_event.get_event_data()
 
         if source in self._sources_expected:
-            updt = Update(model, weight, source, round, time_received)
+            updt = Update(model, weight, delta, source, round, time_received)
             await self._updates_storage_lock.acquire_async()
             if updt in self.us[source]:
                 logging.info(f"Discard | Alerady received update from source: {source} for round: {round}")
             else:
                 self.us[source].append(updt)
                 logging.info(
-                    f"Storage Update | source={source} | round={round} | weight={weight} | federation nodes: {self._sources_expected}"
+                    f"Storage Update | source={source} | round={round} | weight={weight} | delta={delta} | federation nodes: {self._sources_expected}"
                 )
 
                 self._sources_received.add(source)
@@ -163,7 +165,7 @@ class CFLUpdateHandler(UpdateHandler):
         Retrieves the latest updates received this round.
 
         Returns:
-            dict: Mapping of source to (model, weight) tuples.
+            dict: Mapping of source to (model, weight, delta) tuples.
         """
         await self._updates_storage_lock.acquire_async()
         updates_missing = self._sources_expected.difference(self._sources_received)
@@ -180,7 +182,7 @@ class CFLUpdateHandler(UpdateHandler):
             source_historic = self.us[sr]
             updt: Update = None
             updt = source_historic[-1]  # Get last update received
-            updates[sr] = (updt.model, updt.weight)
+            updates[sr] = (updt.model, updt.weight, updt.delta)
         await self._updates_storage_lock.release_async()
         return updates
 

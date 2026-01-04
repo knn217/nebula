@@ -263,6 +263,7 @@ class CommunicationsManager:
             message (BaseMessage): The model message containing the round and payload.
         """
         logging.info(f"🤖  handle_model_message | Received model from {source} with round {message.round}")
+        logging.info(f"🤖  handle_model_message | message {vars(message)}")
         if message.round == -1:
             model_init_event = MessageEvent(("model", "initialization"), source, message)
             asyncio.create_task(EventManager.get_instance().publish(model_init_event))
