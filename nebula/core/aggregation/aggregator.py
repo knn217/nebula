@@ -155,12 +155,12 @@ class Aggregator(ABC):
             logging.info("🔄  get_aggregation | All models accounted for, proceeding with aggregation.")
 
         agg_event = AggregationEvent(updates, self._federation_nodes, missing_nodes)
-        logging.info(f"federation nodes for this round: {self._federation_nodes}")
+        # logging.info(f"federation nodes for this round: {self._federation_nodes}")
         await EventManager.get_instance().publish_node_event(agg_event)
         # Remove deprecated neighbors
         for local_neighbor in list(self._locally_stored_neighbors):
             if local_neighbor not in updates:
-                logging.info(f"removing deprecated local model {local_neighbor}")
+                # logging.info(f"removing deprecated local model {local_neighbor}")
                 del self._locally_stored_neighbors[local_neighbor]
         # Apply updates from the received neigbors
         for received_neighbor in updates:
@@ -168,24 +168,24 @@ class Aggregator(ABC):
             if (not new_delta) or (received_neighbor not in self._locally_stored_neighbors):
                 # Apply overwrite update
                 self._locally_stored_neighbors[received_neighbor] = (updated_model, new_w)
-                logging.info(f"overwritten local model {received_neighbor}: {updated_model}")
+                # logging.info(f"overwritten local model {received_neighbor}: {updated_model}")
                 if received_neighbor not in self._locally_stored_neighbors:
                     logging.info(f"received delta without local model for neighbor, overwritten local model with delta {received_neighbor}")
             else:
                 # Apply incremental update
                 local_model, local_w = self._locally_stored_neighbors[received_neighbor]
-                logging.info(f"local model {received_neighbor}: {local_model}")
-                logging.info(f"model delta indicator {received_neighbor}: {new_delta}")
-                logging.info(f"model delta {received_neighbor}: {updated_model}")
+                # logging.info(f"local model {received_neighbor}: {local_model}")
+                # logging.info(f"model delta indicator {received_neighbor}: {new_delta}")
+                # logging.info(f"model delta {received_neighbor}: {updated_model}")
                 for key in local_model:
                     local_model[key] += updated_model[key]
                 self._locally_stored_neighbors[received_neighbor] = (local_model, new_w)
-                logging.info(f"applied delta to local model {received_neighbor}: {local_model}")
+                # logging.info(f"applied delta to local model {received_neighbor}: {local_model}")
             local_model, local_w = self._locally_stored_neighbors[received_neighbor]
-            logging.info(f"Final result {received_neighbor}: {local_w} | {local_model}")
+            # logging.info(f"Final result {received_neighbor}: {local_w} | {local_model}")
         # Perform aggregation
         aggregated_result = self.run_aggregation(self._locally_stored_neighbors)
-        logging.info(f"Aggregated result {self._addr}: {aggregated_result}")
+        # logging.info(f"Aggregated result {self._addr}: {aggregated_result}")
         return aggregated_result
 
     def print_model_size(self, model):

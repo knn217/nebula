@@ -389,10 +389,10 @@ class Propagator:
             accum_model_deltas_bot = None
             serialized_model_deltas = None
 
-        logging.info(f"old model: {self._old_model}")
-        logging.info(f"model after train: {model_params}")
-        logging.info(f"model deltas to send: {accum_model_deltas_top}")
-        logging.info(f"model params to send: {model_params}")
+        # logging.info(f"old model: {self._old_model}")
+        # logging.info(f"model after train: {model_params}")
+        # logging.info(f"model deltas to send: {accum_model_deltas_top}")
+        # logging.info(f"model params to send: {model_params}")
         self._old_model = copy.deepcopy(model_params)
         self._prev_filtered = copy.deepcopy(accum_model_deltas_bot)
 
