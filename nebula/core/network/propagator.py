@@ -344,16 +344,16 @@ class Propagator:
             serialized_model_params = None
 
         if self._old_model and model_params:
-            model_deltas_top = copy.deepcopy(model_params)
-            model_deltas_bot = copy.deepcopy(model_params)
-            for key in model_deltas_top:
-                # Calculate params of each layer
-                model_deltas_top[key] -= self._old_model[key]
-                model_deltas_bot[key] -= self._old_model[key]
-                # Perform delta filtering here
+            accum_model_deltas_top = copy.deepcopy(model_params)
+            accum_model_deltas_bot = copy.deepcopy(model_params)
+            for key in accum_model_deltas_top:
+                # Calculate delta of each layer
+                accum_model_deltas_top[key] = (model_params[key] - self._old_model[key])
+                accum_model_deltas_bot[key] = (model_params[key] - self._old_model[key])
+                # Perform delta filtering after accumulation
                 # 1. Manually copy tensor values into a new Python list
                 flat = []
-                for x in model_deltas_top[key].view(-1):
+                for x in accum_model_deltas_top[key].view(-1):
                     flat.append(float(x))
                 # Filter 60% lowest values
                 n = len(flat)
@@ -362,37 +362,37 @@ class Propagator:
                 # 2. Compute threshold
                 abs_sorted = sorted(flat, key=lambda x: abs(x))
                 threshold = abs(abs_sorted[k])
-                # Apply filter
-                top = model_deltas_top[key]
-                bot = model_deltas_bot[key]
+                # Apply filter to the accumulated deltas
+                top = accum_model_deltas_top[key]
+                bot = accum_model_deltas_bot[key]
                 mask_top = top.abs() > threshold
                 mask_bot = ~mask_top
                 top[~mask_top] = 0
                 bot[~mask_bot] = 0
                 # Check if tensor math is correct
-                model_check = ((model_deltas_top[key] + model_deltas_bot[key]) != (model_params[key] - self._old_model[key]))
+                model_check = ((accum_model_deltas_top[key] + accum_model_deltas_bot[key]) != (model_params[key] - self._old_model[key]))
                 if model_check.any():
                     logging.info(f"delta filter not correct!")
                     logging.info(f"check: {model_check}")
-                    logging.info(f"top: {model_deltas_top[key]}")
-                    logging.info(f"bot: {model_deltas_bot[key]}")
+                    logging.info(f"top: {accum_model_deltas_top[key]}")
+                    logging.info(f"bot: {accum_model_deltas_bot[key]}")
                     logging.info(f"now: {model_params[key]}")
                     logging.info(f"old: {self._old_model[key]}")
-            serialized_model_deltas = (model_deltas_top if isinstance(model_deltas_top, bytes) else self.trainer.serialize_model(model_deltas_top))
+            serialized_model_deltas = (accum_model_deltas_top if isinstance(accum_model_deltas_top, bytes) else self.trainer.serialize_model(accum_model_deltas_top))
         else:
-            model_deltas_top = None
-            model_deltas_bot = None
+            accum_model_deltas_top = None
+            accum_model_deltas_bot = None
             serialized_model_deltas = None
 
         logging.info(f"old model: {self._old_model}")
         logging.info(f"model after train: {model_params}")
-        logging.info(f"model deltas to send: {model_deltas_top}")
+        logging.info(f"model deltas to send: {accum_model_deltas_top}")
         logging.info(f"model params to send: {model_params}")
         self._old_model = copy.deepcopy(model_params)
         # Keep the filtered bottom params in the old model
-        # if self._old_model and model_deltas_bot:
+        # if self._old_model and accum_model_deltas_bot:
         #     for key in self._old_model:
-        #         self._old_model[key] -= model_deltas_bot[key]
+        #         self._old_model[key] -= accum_model_deltas_bot[key]
 
         current_round = await self.get_round()
         round_number = -1 if strategy_id == "initialization" else current_round
