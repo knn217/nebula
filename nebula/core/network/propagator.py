@@ -182,6 +182,7 @@ class Propagator:
         self._cm = None
         self._running = asyncio.Event()
         self._old_model = None
+        self._prev_filtered = None
         self._old_neighbors = []
 
     @property
@@ -350,6 +351,10 @@ class Propagator:
                 # Calculate delta of each layer
                 accum_model_deltas_top[key] = (model_params[key] - self._old_model[key])
                 accum_model_deltas_bot[key] = (model_params[key] - self._old_model[key])
+                # Accumulate the previously filtered deltas to the new deltas
+                if self._prev_filtered:
+                    accum_model_deltas_top[key] += self._prev_filtered[key]
+                    accum_model_deltas_bot[key] += self._prev_filtered[key]
                 # Perform delta filtering after accumulation
                 # 1. Manually copy tensor values into a new Python list
                 flat = []
@@ -389,10 +394,7 @@ class Propagator:
         logging.info(f"model deltas to send: {accum_model_deltas_top}")
         logging.info(f"model params to send: {model_params}")
         self._old_model = copy.deepcopy(model_params)
-        # Keep the filtered bottom params in the old model
-        # if self._old_model and accum_model_deltas_bot:
-        #     for key in self._old_model:
-        #         self._old_model[key] -= accum_model_deltas_bot[key]
+        self._prev_filtered = copy.deepcopy(accum_model_deltas_bot)
 
         current_round = await self.get_round()
         round_number = -1 if strategy_id == "initialization" else current_round
