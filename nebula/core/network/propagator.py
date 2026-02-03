@@ -360,9 +360,9 @@ class Propagator:
                 flat = []
                 for x in accum_model_deltas_top[key].view(-1):
                     flat.append(float(x))
-                # Filter 60% lowest values
+                # Filter 40% lowest values
                 n = len(flat)
-                k = int(n * 0.6)
+                k = int(n * 0.4)
                 logging.info(f"Number of filtered params: {k}")
                 # 2. Compute threshold
                 abs_sorted = sorted(flat, key=lambda x: abs(x))
@@ -375,7 +375,11 @@ class Propagator:
                 top[~mask_top] = 0
                 bot[~mask_bot] = 0
                 # Check if tensor math is correct
-                model_check = ((accum_model_deltas_top[key] + accum_model_deltas_bot[key]) != (model_params[key] - self._old_model[key]))
+                model_check = None
+                if self._prev_filtered:
+                    model_check = ((accum_model_deltas_top[key] + accum_model_deltas_bot[key]) != (model_params[key] - self._old_model[key] + self._prev_filtered[key]))
+                else:
+                    model_check = ((accum_model_deltas_top[key] + accum_model_deltas_bot[key]) != (model_params[key] - self._old_model[key]))
                 if model_check.any():
                     logging.info(f"delta filter not correct!")
                     logging.info(f"check: {model_check}")
